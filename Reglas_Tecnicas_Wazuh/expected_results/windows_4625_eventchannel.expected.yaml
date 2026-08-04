@@ -1,0 +1,27 @@
+# Expected results — REGLAS_TUNEADAS/test_data/windows_4625_eventchannel.json
+# Fuente: RESULTADOS_ESPERADOS.docx (no editado; re-expresion estructurada).
+# Verificado contra el fixture real (11 lineas: 10x eventID 4625 + 1x eventID
+# 4624, misma ipAddress 198.51.100.23, mismo targetUserName "administrador").
+# Estado de validacion: PENDIENTE (sin evidencia de ejecucion guardada).
+fixture: test_data/windows_4625_eventchannel.json
+wazuh_version: v4.14.6
+validation_status: PENDIENTE
+expectations:
+  - lines: "1-10"
+    log: "10x eventID 4625 (logon failure), misma ipAddress y mismo targetUserName, en <240s"
+    expected_native_rule: "cada 4625 -> 60122 level 5 (via 60103/60105)"
+    expected_at_8th_match:
+      by_ip: "60204 level 10 (same_field win.eventdata.ipAddress) -- password spraying nativo"
+      by_account:
+        kriptome_rule: 100011
+        expected_level: 10
+        expected_case_type: AUTH_BRUTEFORCE_SUCCESS
+    expected_routing: CANDIDATE
+  - lines: "11"
+    log: "1x eventID 4624 (logon success), misma ipAddress"
+    expected_native_rule: "60106 level 3"
+    expected_kriptome_rule: 100013
+    expected_kriptome_level: 12
+    expected_case_type: AUTH_BRUTEFORCE_SUCCESS
+    expected_routing: CRITICAL
+    note: "login Windows OK tras brute force -- equivalente Windows de 100012"

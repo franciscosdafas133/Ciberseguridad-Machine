@@ -1,0 +1,66 @@
+<!--
+  ===========================================================================
+  Kriptome — agent.conf del GRUPO de un cliente (ejemplo: CLI-001)
+  ===========================================================================
+  Se despliega al grupo Wazuh CLI-001. Todo lo que emitan sus agentes llevara
+  el label agent.labels.client_code=CLI-001, que la Kriptome App usa como
+  EVIDENCIA OPERACIONAL para resolver el tenant -- NO como autoridad final.
+  ==
+  CORRECCION v1.3.1 (Fase 3 -- identidad de tenant/cliente):
+  el campo se llamaba "client_id" en versiones previas de este archivo, pero
+  lo que en realidad contiene es el CODIGO VISIBLE del cliente (CLI-001),
+  no un identificador tecnico interno inmutable. Se renombra a client_code.
+  El tenant_id real (clave tecnica estable, ver specifications/tenant.schema.json)
+  vive en el tenant registry, resuelto en backend -- nunca en este archivo.
+  Ver specifications/tenant_identifier_migration.md para el detalle completo
+  de la migracion, y specifications/wazuh_alert_field_paths.md para confirmar
+  que estas labels viven bajo agent.labels.*, no bajo data.labels.*.
+  ==
+  CORRECCION v1.3.1 (Fase 6 -- PII fuera de labels):
+  el label "client_name" (nombre del cliente, PII/dato mutable) se retiro.
+  El nombre comercial del cliente vive UNICAMENTE en el tenant registry
+  (specifications/tenant.schema.json, campo tenant_name), resuelto por
+  backend a partir de client_code -- nunca se envia como label de Wazuh
+  porque las labels quedan indexadas en el Indexer y son dificiles de
+  corregir/purgar si cambian (p.ej. razon social actualizada).
+  ==
+  IMPORTANTE (doc 01 secc.5, actualizado): ninguna consulta TENANT-SCOPED al
+  Indexer corre sin tenant_id resuelto. agent.labels.client_code es
+  evidencia operacional de entrada al Tenant Resolver (ver
+  specifications/tenant_resolution.schema.json), no la autoridad -- el
+  tenant_id final se resuelve contra el tenant registry y el asset registry
+  en backend, comparando esta label con el wazuh_group real del agente.
+  ===========================================================================
+-->
+<agent_config>
+
+  <labels>
+    <label key="client_code">CLI-001</label>
+    <!-- client_name RETIRADO (v1.3.1): es PII/dato mutable, no un codigo
+         operativo. El nombre comercial se resuelve desde el tenant
+         registry por backend, usando client_code como clave de busqueda. -->
+    <!-- criticality/asset_* NO van aqui: son por-agente (ossec.conf del agente) -->
+  </labels>
+
+  <!-- Aqui pueden ir overrides de FIM/logs especificos del parque de este
+       cliente (p.ej. rutas de una app de negocio suya). -->
+
+</agent_config>
+
+<!--
+  ===========================================================================
+  Ejemplo del bloque <labels> POR AGENTE (en el ossec.conf del endpoint):
+  ===========================================================================
+  <labels>
+    <label key="asset_code">AST-004</label>
+    <label key="criticality_code">high</label>
+    <label key="environment_code">prod</label>
+    <label key="asset_role_code">db</label>
+  </labels>
+  NOTA v1.3.1: "asset_alias" (nombre de negocio del equipo, p.ej. "Servidor de
+  facturacion") se retiro de las labels por el mismo motivo que client_name:
+  es un dato de negocio mutable, vive en specifications/asset_context.schema.json
+  (CMDB), resuelto por backend a partir de asset_code. Las labels de Wazuh
+  se limitan a CODIGOS operativos estables, nunca texto libre de negocio.
+  ===========================================================================
+-->

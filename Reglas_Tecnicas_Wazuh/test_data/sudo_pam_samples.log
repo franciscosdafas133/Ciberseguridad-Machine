@@ -1,0 +1,4 @@
+Jul  6 16:01:11 linux01 sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Jul  6 16:02:11 linux01 sudo:   intruso : TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/bash
+Jul  6 16:03:11 linux01 sudo:   intruso : user NOT in sudoers ; TTY=pts/1 ; PWD=/tmp ; USER=root ; COMMAND=/bin/bash
+Jul  6 16:04:01 linux01 sshd[9001]: pam_unix(sshd:session): session opened for user deploy by (uid=0)

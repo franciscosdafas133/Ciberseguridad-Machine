@@ -1,0 +1,65 @@
+Familia,RuleID,Significado real (XML v4.14.6),Ruta Kriptome,Umbral,Ventana,Correlacion,Fingerprint (case_type),Cambio material,IA,Comunicacion,Accion de tuning
+SSH,5715,sshd authentication success (lvl3),CONTEXT,-,-,alimenta 100012,-,"login OK tras fallos (=>100012)",no,no,keep; App usa como contexto
+SSH,5716/5760,sshd authentication failed (lvl5),CONTEXT/DIGEST,>=3 repeticiones app,-,alimenta 5720/5763,client+asset+AUTH_FAIL_SSH+srcip,nuevo srcip,no,digest,keep
+SSH,5710,intento login usuario inexistente (lvl5),CONTEXT,-,-,alimenta 5712,-,recon,no,digest,keep
+SSH,5712,brute force usuario inexistente (lvl10),CANDIDATE,freq8,120s,same_source_ip,client+asset+AUTH_BRUTEFORCE_SSH+srcip,exito posterior,al crear caso,inmediata si asset high/critical; si no >=3,keep nativa
+SSH,5763,brute force usuario valido (lvl10),CANDIDATE,freq8,120s,same_source_ip (via 5760),client+asset+AUTH_BRUTEFORCE_SSH+srcip,exito posterior,al crear caso,inmediata si high/critical,keep nativa
+SSH,5720,multiple auth failures (lvl10),CANDIDATE,freq8,SIN timeframe (quirk),same_source_ip,client+asset+AUTH_BRUTEFORCE_SSH+srcip,exito posterior,al crear caso,igual,keep; nota quirk sin timeframe
+SSH,100010,ROLL-UP brute force SSH (lvl10),CANDIDATE,hereda,hereda,if_sid 5712/5719/5720/5763,client+asset+AUTH_BRUTEFORCE_SSH+srcip,exito posterior,al crear caso,inmediata si high/critical,CUSTOM keep (unifica + habilita 100012)
+SSH,100012,login OK tras brute force (lvl12),CRITICAL,-,600s,if_sid5715+if_matched100010+same_ip,mismo caso brute force (+material),login exitoso,al cambio material,inmediata SIN quiet hours,CUSTOM fix (2x if_matched_sid roto)
+Windows auth,60106,Windows logon success 4624 (lvl3),CONTEXT,-,-,alimenta 100013,-,login OK tras fallos,no,no,keep
+Windows auth,60122,logon failure 4625 (lvl5),CONTEXT/DIGEST,>=3 app,-,alimenta 60204/100011,client+asset+AUTH_FAIL_WIN+ip,nuevo srcip/cuenta,no,digest,keep
+Windows auth,60204,multiple logon failures por IP (lvl10),CANDIDATE,MS_FREQ=8,240s,same_field ipAddress,client+asset+AUTH_BRUTEFORCE_WIN_IP+ip,exito posterior,al crear caso,inmediata si high/critical,keep nativa (password spraying)
+Windows auth,100011,brute force Windows por CUENTA (lvl10),CANDIDATE,freq8,240s,same_field targetUserName,client+asset+AUTH_BRUTEFORCE_WIN_USER+user,exito posterior,al crear caso,inmediata si high/critical,CUSTOM fix (same_user->same_field)
+Windows auth,100013,login Win OK tras brute force (lvl12),CRITICAL,-,600s,if_sid60106+if_matched60204+same ip,mismo caso brute force (+material),login exitoso,al cambio material,inmediata SIN quiet hours,CUSTOM nuevo (paridad con 100012)
+Active Directory,60110,User account changed 4738/4781 (lvl8),CANDIDATE,-,-,-,client+asset+AD_ACCOUNT_CHANGE+target,nueva cuenta/priv,al crear caso,inmediata si DC critical,keep
+Active Directory,60107/60203,fallo op privilegiada / repetido (lvl4/10),CONTEXT/CANDIDATE,60203 freq8,240s,same_field targetUserName,client+asset+AD_PRIVOP+user,escalada,al crear caso,digest/inmediata,keep
+Active Directory,4740/4728/4732/4756,lockout / add a grupo sensible (Domain Admins),CANDIDATE-CRITICAL,-,-,-,client+asset+AD_GROUPCHANGE+group,nuevo miembro admin,al crear caso,inmediata,FALTA REVISAR IDs exactos en 0580 (marcado NO VERIFICADO)
+Sudo/priv,5402,Successful sudo to ROOT (lvl3),CONTEXT,-,-,alimenta escalada,-,"root fuera de horario (App)",no,no (contexto),keep; NO silenciar en Wazuh (borra 100020)
+Sudo/priv,5407,Successful sudo (otro user) (lvl3),CONTEXT,-,-,-,-,-,no,no,keep
+Sudo/priv,5403,First time user executed sudo (lvl4),CANDIDATE,-,-,if_fts,client+asset+SUDO_FIRSTTIME+user,nuevo usuario priv,al crear caso,digest/inmediata si critical,keep
+Sudo/priv,5405,user NOT in sudoers (lvl5),CANDIDATE,-,-,-,client+asset+SUDO_DENIED+user,-,al crear caso,inmediata si high,keep
+Sudo/priv,5404,3 failed sudo attempts (lvl10),CANDIDATE,3,-,-,client+asset+SUDO_BRUTE+user,-,al crear caso,inmediata si high,keep nativa
+FIM,550,Integrity checksum changed (lvl7),CANDIDATE,-,-,path-sensitive,client+asset+FIM_MODIFY+file,nuevo archivo sensible,al crear caso,inmediata si path critico,keep; ruido por path -> agent.conf ignore
+FIM,553,File deleted (lvl7),CANDIDATE,-,-,-,client+asset+FIM_DELETE+file,-,al crear caso,inmediata si path critico,keep
+FIM,554,File added (lvl5),CANDIDATE,-,-,alimenta 99901,client+asset+FIM_ADD+file,nuevo binario,al crear caso,digest/inmediata,keep
+FIM,594/598,Windows registry key changed/added (lvl5),CANDIDATE,-,-,-,client+asset+FIM_REGISTRY+key,persistencia registry,al crear caso,digest/inmediata,keep
+FIM,99901,archivo con hash de malware (lvl14),CRITICAL,-,-,list malware-hashes,client+asset+MALWARE_FILE+sha256,ejecucion,al crear caso,inmediata SIN quiet hours + humano,keep nativa; POBLAR lista
+FIM,100030,FIM en path whitelisted (lvl0),DROP,-,-,list kriptome-fim-whitelist,-,-,no,no,CUSTOM fix (lista CDB en vez de hardcode)
+Rootcheck,510,Host-based anomaly (rootcheck) (lvl7),CANDIDATE,-,-,-,client+asset+ROOTCHECK+desc,-,al crear caso,digest/inmediata,keep
+Rootcheck,513,Windows malware detected (lvl9),CRITICAL,-,-,-,client+asset+ROOTKIT+desc,-,al crear caso,inmediata + humano,keep (doc citaba 514 por error)
+Rootcheck,511/512/514,ADS ignorado / Win audit / app monitor (lvl0/3/2),CONTEXT/DROP,-,-,-,-,-,no,no,keep bajo (informativo)
+SCA,19011,check paso de passed->failed (lvl9),CANDIDATE,-,-,-,client+asset+SCA_REGRESSION+check,control critico regresa,al crear caso,digest (o inmediata si control critico),keep (senal accionable SCA)
+SCA,19005,SCA score < 30% (lvl9),DIGEST,-,-,-,client+asset+SCA_SCORE+policy,-,no,digest semanal,keep -> digest
+SCA,19001-19010,summaries / checks OK (lvl0-7),DIGEST/CONTEXT,-,-,-,-,-,no,digest,keep; postura no urgente
+Vuln,23503,CVE Active severity Low (lvl5),DIGEST,-,-,-,client+asset+VULN+cve,-,no,digest,keep
+Vuln,23504,CVE Active Medium/Untriaged (lvl7),DIGEST,-,-,-,client+asset+VULN+cve,-,no,digest,keep
+Vuln,23505,CVE Active High (lvl10),CANDIDATE,-,-,-,client+asset+VULN+cve,nuevo CVE en asset critico,al crear caso,digest priorizado (NO inmediata por si sola),keep; NO tratar lvl10 como incidente activo
+Vuln,23506,CVE Active Critical (lvl13),CANDIDATE,-,-,-,client+asset+VULN+cve,-,al crear caso,digest priorizado + revision (NO despertar salvo KEV),RETUNE routing: lvl13 CVE != intrusion activa
+Vuln,100040,CVE en CISA KEV (lvl13) [DESCARTADA-PARA-PRODUCCION v1.3.1: ver policies/case_types/VULNERABILITY.yaml],EXPERIMENTAL,-,-,list kriptome-cisa-kev,client+asset+VULN+cve (MISMO fingerprint que 23504-23506; v1.3.1 corrige inconsistencia previa VULN_KEV+cve),asset ahora critico (via enriquecimiento KEV en la App; no via esta regla),al crear caso,inmediata + humano (solo si kev_status=listed),CUSTOM historica; funcion cubierta por enriquecimiento App sobre 23501/23504/23505/23506
+Vuln,23502/23507,CVE resuelto / cleared (lvl3),CONTEXT,-,-,-,cierra caso VULN,remediado,no,no (cierre),keep; usar para cerrar casos
+AV/EDR,87105,VirusTotal: N engines detectaron archivo (lvl12),CRITICAL,-,-,integracion VT,client+asset+MALWARE_AV+sha256,ejecucion,al crear caso,inmediata + humano,keep (doc citaba 87104 = resultado limpio; ERROR)
+AV/EDR,62102,Windows Defender error event (lvl5),CONTEXT,-,-,alimenta 62105,-,-,no,digest,keep (doc decia 87700; rango ERROR)
+AV/EDR,62105/62106,multiple Defender errors/warnings corto plazo (lvl14),CRITICAL,MS_FREQ=8,30-60s,-,client+asset+AV_STORM+host,-,al crear caso,inmediata + humano,keep nativa
+Firewall/IDS,4101,Firewall drop event (lvl5),CONTEXT/DIGEST,-,-,alimenta 4151,-,-,no,digest,keep; alto volumen -> App agrupa
+Firewall/IDS,4151,multiple drops misma fuente (lvl10),CANDIDATE,freq18,45s,same_source_ip,client+asset+FW_SCAN+srcip,-,al crear caso,digest/inmediata si asset critical,keep nativa
+Firewall/IDS,99915-99918,Suricata IOC IP/dominio malicioso (lvl9),CANDIDATE-CRITICAL,-,-,listas malicious-ioc,client+asset+IDS_IOC+ioc,C2/exfil,al crear caso,inmediata si high,keep nativa; POBLAR listas
+VPN,81801,OpenVPN user logged in (lvl3),CONTEXT,-,-,-,-,VPN nuevo geo/hora (App),no,no,keep (doc decia 60000+; ERROR)
+VPN,81803/81804,OpenVPN cert failed / posible revocado (lvl4),CANDIDATE,81804 freq3,60s,-,client+asset+VPN_CERTFAIL+user,-,al crear caso,digest/inmediata,keep
+VPN,81805/81806,OpenVPN LDAP bind/logon failure (lvl5),CANDIDATE,-,-,-,client+asset+VPN_AUTHFAIL+user,exito posterior,al crear caso,digest/inmediata,keep; depende de producto VPN real
+Sysmon,61603,Sysmon Process Create EID1 (lvl0),CONTEXT,-,-,correlacion/watchlist,-,proceso en watchlist,no,no,keep lvl0 (YA silencioso; doc pedia bajar; innecesario)
+Sysmon,61613,Sysmon Network Connection EID3 (lvl0),CONTEXT,-,-,correlacion/threat intel,-,dstip en TI,no,no,keep lvl0 (YA silencioso)
+Sysmon,61618,Sysmon deteccion elevada (lvl12),CANDIDATE-CRITICAL,-,-,-,client+asset+SYSMON+desc,-,al crear caso,inmediata si high,keep
+Malware/IOC,99903,SSH login OK desde IP maliciosa (lvl14),CRITICAL,-,-,list malicious-ip,client+asset+IOC_LOGIN_SSH+srcip,acceso conseguido,al crear caso,inmediata + humano,keep nativa; POBLAR lista
+Malware/IOC,99904,SSH login FAIL desde IP maliciosa (lvl9),CANDIDATE,-,-,list malicious-ip,client+asset+IOC_FAIL_SSH+srcip,exito posterior,al crear caso,inmediata si high,keep nativa
+Malware/IOC,99919/99920,logon Windows fail/OK desde IP maliciosa (lvl9/14),CANDIDATE/CRITICAL,-,-,list malicious-ip,client+asset+IOC_LOGIN_WIN+ip,acceso conseguido,al crear caso,inmediata + humano (99920),keep nativa
+Salud sensor,503,Agent started - agente reconecta (lvl3),CONTEXT,-,-,cierra AGENT_DOWN,-,reconexion (cierra caso),no,no (cierre automatico),NUEVA familia 14; VALIDADO-XML 0015-ossec
+Salud sensor,504,Agent disconnected (lvl3),CANDIDATE,-,-,App vigila ademas keepalive >15min,client+asset+AGENT_DOWN+agent,sigue caido >15min / activo critico / varios agentes a la vez,no (plantilla),inmediata si asset high/critical; digest diario resto,NUEVA familia 14; VALIDADO-XML; sensor apagado = posible manipulacion o falla de servicio
+Salud sensor,505,Agent removed (lvl3),CANDIDATE,-,-,-,client+asset+AGENT_REMOVED+agent,-,no (plantilla),correo para confirmar baja legitima,NUEVA familia 14; VALIDADO-XML
+Salud sensor,506,Agent stopped (lvl3),CANDIDATE,-,-,-,client+asset+AGENT_DOWN+agent,igual que 504,no (plantilla),igual que 504,NUEVA familia 14; VALIDADO-XML
+Correo nube M365,91556,EOP/Defender: phishing o malware en correo (lvl12),CRITICAL,-,-,-,client+asset+M365_PHISH+destinatario,usuario abrio/click posterior,al crear caso,inmediata + humano,NUEVA familia 15; PEND-INTEGRACION (wodle office365 + quitar rule_exclude 0755)
+Correo nube M365,91700,malware detectado en archivo M365 (lvl14),CRITICAL,-,-,-,client+asset+M365_MALWARE+sha256,-,al crear caso,inmediata + humano,NUEVA familia 15; PEND-INTEGRACION
+Correo nube M365,91589,alerta de usuario comprometido M365 (lvl7),CRITICAL,-,-,-,client+asset+M365_COMPROMISED+user,-,al crear caso,inmediata + humano + CANAL ALTERNO (telefono; no avisar por el buzon robado),NUEVA familia 15; PEND-INTEGRACION
+Correo nube M365,91724,descarga masiva sospechosa por usuario (lvl10),CANDIDATE,freq100,60s,same_field office365.UserId,client+asset+M365_EXFIL+user,continua tras aviso,al crear caso,inmediata si high,NUEVA familia 15; PEND-INTEGRACION
+Correo nube M365,91725,usuario recibe FullAccess en Exchange (lvl10),CANDIDATE,-,-,-,client+asset+M365_PERM+user,-,al crear caso,inmediata (confirmar con cliente),NUEVA familia 15; PEND-INTEGRACION
+Correo nube M365,91545,logons STS Azure AD (lvl3),CONTEXT,-,-,alimenta futura 100050,-,login fallido repetido / geo inusual (App o custom),no,no,NUEVA familia 15; no existe regla nativa de login fallido M365 -> custom futura 100050 marcada PEND

@@ -1,0 +1,133 @@
+name: Validate contracts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema pyyaml check-jsonschema
+
+      - name: JSON syntax check (python -m json.tool)
+        run: |
+          set -e
+          find specifications archive_historico/examples policies -name "*.json" -print0 | \
+            xargs -0 -I{} python -m json.tool {} > /dev/null
+
+      - name: JSON Schema validity (Draft 2020-12, check-jsonschema)
+        run: |
+          set -e
+          for f in specifications/*.schema.json archive_historico/examples/client_notifications/*.schema.json; do
+            [ -f "$f" ] || continue
+            echo "Checking schema: $f"
+            check-jsonschema --check-metaschema "$f"
+          done
+
+      - name: YAML syntax check
+        run: |
+          python - <<'PYEOF'
+          import glob, sys, yaml
+          patterns = [
+              "policies/**/*.yaml",
+              "procedures/**/*.yaml",
+              "REGLAS_TUNEADAS/expected_results/**/*.yaml",
+              "specifications/*.yaml",
+          ]
+          files = []
+          for p in patterns:
+              files.extend(glob.glob(p, recursive=True))
+          bad = []
+          for f in sorted(set(files)):
+              try:
+                  list(yaml.safe_load_all(open(f, encoding="utf-8").read()))
+              except yaml.YAMLError as e:
+                  bad.append(f"{f}: {e}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          print(f"OK: {len(files)} archivos YAML validos")
+          PYEOF
+
+      - name: XML well-formedness (structure only, not Wazuh runtime)
+        run: |
+          python - <<'PYEOF'
+          import glob, sys
+          import xml.etree.ElementTree as ET
+          patterns = [
+              "REGLAS_TUNEADAS/wazuh/**/*.xml",
+              "REGLAS_TUNEADAS/experimental/**/*.xml",
+          ]
+          files = []
+          for p in patterns:
+              files.extend(glob.glob(p, recursive=True))
+          bad = []
+          for f in sorted(set(files)):
+              txt = open(f, encoding="utf-8").read()
+              try:
+                  ET.fromstring("<root>" + txt + "</root>")
+              except ET.ParseError as e:
+                  bad.append(f"{f}: {e}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          print(f"OK: {len(files)} archivos XML bien formados (no valida comportamiento real en Wazuh)")
+          PYEOF
+
+      - name: Full repository validation (schemas, policies, CSV drift, forbidden patterns, state machine, v1.3.1 checks)
+        run: python scripts/validate_repository.py
+
+      - name: Required files present
+        run: |
+          set -e
+          for f in \
+            DOCUMENTATION_SOURCE_OF_TRUTH.md \
+            specifications/tenant.schema.json \
+            specifications/tenant_asset_assignment.schema.json \
+            specifications/case_summary.schema.json \
+            specifications/asset_context.schema.json \
+            specifications/auth_evidence.schema.json \
+            specifications/risk_result.schema.json \
+            specifications/procedure.schema.json \
+            procedures/README.md \
+            implementation/multi_tenant_two_tenant_plan.md ; do
+            if [ ! -f "$f" ]; then
+              echo "FALTA: $f"
+              exit 1
+            fi
+          done
+          echo "OK: todos los archivos obligatorios presentes"
+
+      - name: Forbidden active references (excluding historical/deprecation files)
+        run: |
+          set -e
+          # Los archivos historicos/de deprecacion pueden mencionar estos
+          # patrones a proposito (documentan que fueron corregidos/reemplazados).
+          EXCLUDE_FILES="REGLAS_TUNEADAS/CHANGELOG.md REPO_ALIGNMENT_REPORT.md DOCUMENTATION_SOURCE_OF_TRUTH.md policies/case_types/VULNERABILITY_KEV.yaml archive_historico/examples/client_notifications/README.md procedures/README.md README.md scripts/validate_repository.py .github/workflows/validate-contracts.yml"
+          FOUND=0
+          for pattern in "Bloque A/B/C" "como_responder" "EJEMPLO-NO-REAL"; do
+            MATCHES=$(git grep -l -n "$pattern" -- '*.md' '*.json' '*.yaml' '*.yml' ':!REGLAS_TUNEADAS/archive/**' 2>/dev/null || true)
+            for m in $MATCHES; do
+              SKIP=0
+              for ex in $EXCLUDE_FILES; do
+                if [ "$m" = "$ex" ]; then SKIP=1; fi
+              done
+              if [ "$SKIP" -eq 0 ]; then
+                echo "Referencia activa no historica encontrada: $m contiene '$pattern'"
+                FOUND=1
+              fi
+            done
+          done
+          if [ "$FOUND" -eq 1 ]; then exit 1; fi
+          echo "OK: sin referencias activas prohibidas fuera de archivos historicos"

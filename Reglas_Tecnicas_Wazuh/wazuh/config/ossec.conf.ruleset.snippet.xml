@@ -1,0 +1,117 @@
+<!--
+  Fragmento <ruleset> para /var/ossec/etc/ossec.conf del Manager (Kriptome).
+  Wazuh v4.14.6. Reemplaza el bloque <ruleset> por este.
+
+  PARIDAD CON EL DEFAULT: este bloque CONSERVA todo lo que trae el ossec.conf
+  default de v4.14.6 (verificado contra etc/templates/config/generic/rules.template
+  del tag v4.14.6) y le AÑADE lo de Kriptome. En concreto se conservan:
+   - <rule_exclude>0215-policy_rules.xml</rule_exclude>  (exclusion DEFAULT de
+     Wazuh; si se pierde al reemplazar el bloque, se activan reglas legacy de
+     policy que generan ruido).
+   - Las 6 <list> default (audit-keys, aws-eventnames, security-eventchannel,
+     malicious-ioc/*). NO quitar una lista aunque su tecnologia este excluida:
+     si manana se retira un rule_exclude (p.ej. el cliente adopta AWS) y la
+     lista que esas reglas referencian no esta declarada, analysisd NO ARRANCA.
+
+  CORRECCIONES vs 02_Set_Reglas.md seccion 6:
+   - Se añade el <list> de kriptome-fim-whitelist (usado por la regla activa
+     100030). Ese archivo debe copiarse a etc/lists/ ANTES de reiniciar
+     (ver GUIA_DE_DESPLIEGUE).
+   - El orden importa: primero decoders/rules oficiales, luego custom.
+
+  CORRECCION v1.3.1 (Fase 14: rule_exclude en un Manager COMPARTIDO):
+  ossec.conf y su bloque <ruleset> son GLOBALES a todo el Manager: en la
+  arquitectura multi-tenant de Kriptome, UN Manager atiende a VARIOS
+  tenants (ver docs/architecture/WAZUH_GROUP_PRECEDENCE.md). Si el tenant A
+  no usa AWS pero el tenant B SI lo usa, un <rule_exclude>0350-amazon_rules.xml</rule_exclude>
+  puesto "porque el tenant A no usa AWS" desactivaria la deteccion de AWS
+  para TODOS los tenants del Manager, incluido B. Por eso:
+
+  RULE_EXCLUDE SOLO ES VALIDO cuando la tecnologia esta ausente en TODO EL
+  PARQUE atendido por este Manager (ningun tenant de los que comparten este
+  Manager la usa). NUNCA se usa como personalizacion de un tenant
+  individual: ese es el error que tenian versiones previas de este
+  archivo (el ejemplo de comentario decia "p.ej. el cliente adopta AWS",
+  dando a entender una decision por-cliente en un Manager compartido).
+
+  Para personalizacion POR TENANT (no por Manager completo), las opciones
+  correctas son:
+    (a) habilitar/deshabilitar modulos o recoleccion a nivel de GRUPO Wazuh
+        del tenant (ver agent.conf del grupo, no ossec.conf del Manager);
+    (b) filtrar el ROUTING en la capa Kriptome (policies/case_types/*.yaml +
+        routing_matrix): una regla puede seguir disparando en Wazuh pero
+        el motor de casos decide no abrir caso ni notificar para ese tenant
+        si la tecnologia no aplica a su contrato;
+    (c) configurar la integracion especifica por AGENTE (p.ej. activar el
+        modulo AWS solo en los agentes del tenant que lo usa, no a nivel
+        global de decodificacion/reglas);
+    (d) una policy tenant-specific explicita, si el diseño de la Kriptome
+        App llega a soportarlo (fuera de alcance de este repo hoy).
+
+  Los <rule_exclude> que siguen abajo (AWS/GCP/Azure/Docker/O365/GitHub) se
+  mantienen SOLO como EJEMPLO de sintaxis: antes de aplicarlos a un
+  Manager real, confirmar que NINGUN tenant atendido por ese Manager usa
+  esa tecnologia. Si un solo tenant la usa, esa linea NO debe estar.
+
+  NOTA v1.2.0 — kriptome-cisa-kev y la regla 100040:
+  la regla 100040 (que consumia esta lista) se movio a
+  REGLAS_TUNEADAS/experimental/100040_cisa_kev.xml (estado EXPERIMENTAL,
+  decision de arquitectura KEV pendiente — ver ese archivo). Por eso el
+  <rule_dir>etc/rules</rule_dir> de mas abajo NO carga experimental/, y este
+  snippet NO declara <list>etc/lists/kriptome-cisa-kev</list>: el set activo
+  (wazuh/rules/kriptome_local_rules.xml) no la necesita. Si en el futuro se activa
+  100040, hay que: (a) copiar el archivo de experimental/ a etc/rules/,
+  (b) añadir aqui <list>etc/lists/kriptome-cisa-kev</list>, y (c) reemplazar
+  el fixture de la lista por el feed real (ver lists/kriptome-cisa-kev.FIXTURE.md).
+-->
+<ruleset>
+  <!-- Decoders y reglas oficiales -->
+  <decoder_dir>ruleset/decoders</decoder_dir>
+  <rule_dir>ruleset/rules</rule_dir>
+  <rule_exclude>0215-policy_rules.xml</rule_exclude>
+
+  <!-- Listas CDB default de Wazuh v4.14.6 (mantener SIEMPRE las 6) -->
+  <list>etc/lists/audit-keys</list>
+  <list>etc/lists/amazon/aws-eventnames</list>
+  <list>etc/lists/security-eventchannel</list>
+  <list>etc/lists/malicious-ioc/malware-hashes</list>
+  <list>etc/lists/malicious-ioc/malicious-ip</list>
+  <list>etc/lists/malicious-ioc/malicious-domains</list>
+
+  <!-- Lista CDB de Kriptome usada por el set ACTIVO (regla 100030) -->
+  <list>etc/lists/kriptome-fim-whitelist</list>
+
+  <!-- Decoders y reglas custom de Kriptome -->
+  <decoder_dir>etc/decoders</decoder_dir>
+  <rule_dir>etc/rules</rule_dir>
+
+  <!--
+    Exclusiones por PARQUE COMPLETO del Manager (v1.3.1: NO por cliente
+    individual; ver nota extensa arriba, "CORRECCION v1.3.1 Fase 14").
+    Solo si NINGUN tenant atendido por este Manager usa esa tecnologia.
+    Verifica el nombre EXACTO del archivo en ruleset/rules/ antes de excluir.
+    (En v4.14 los nombres cambian respecto al doc: p.ej. AWS = 0350-amazon_rules.xml,
+     Azure = 0555-azure_rules.xml, Docker = 0455-docker_rules.xml / 0560-docker_integration_rules.xml,
+     GCP = 0690-gcp_rules.xml, O365 = 0755-office365_rules.xml, GitHub = 0750-github_rules.xml)
+  -->
+  <!--
+    CORRECCION (cierre de auditoria teorica): las 7 lineas de abajo estaban
+    activas por defecto pese a que el comentario de arriba (linea 51-54) las
+    describia como "SOLO EJEMPLO de sintaxis". Un operador que siguiera la
+    instruccion literal de la linea 3 ("reemplaza el bloque <ruleset> por
+    este") sin leer los 50+ lineas de advertencia previas desactivaria
+    deteccion de AWS/GCP/Azure/Docker/M365/GitHub para TODO el Manager
+    compartido, incluidos tenants que si usan esas tecnologias. Ahora estan
+    comentadas: el operador debe decidir explicitamente, tecnologia por
+    tecnologia, y descomentar solo las que esten ausentes en TODO el parque
+    de este Manager (ver regla en linea 30-35 arriba) antes de desplegar.
+
+    <rule_exclude>0350-amazon_rules.xml</rule_exclude>
+    <rule_exclude>0690-gcp_rules.xml</rule_exclude>
+    <rule_exclude>0555-azure_rules.xml</rule_exclude>
+    <rule_exclude>0455-docker_rules.xml</rule_exclude>
+    <rule_exclude>0560-docker_integration_rules.xml</rule_exclude>
+    <rule_exclude>0755-office365_rules.xml</rule_exclude>
+    <rule_exclude>0750-github_rules.xml</rule_exclude>
+  -->
+</ruleset>

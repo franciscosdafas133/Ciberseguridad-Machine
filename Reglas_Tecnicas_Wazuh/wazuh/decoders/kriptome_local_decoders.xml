@@ -1,0 +1,20 @@
+<!--
+  ===========================================================================
+  Kriptome MiniSOC — Decoders custom
+  ===========================================================================
+  Deploy: /var/ossec/etc/decoders/kriptome_local_decoders.xml
+  ==
+  ESTADO: VACIO A PROPOSITO (v1.0.0).
+
+  El tuning de este set NO requiere decoders nuevos. Todos los campos que usan
+  las reglas custom ya los produce el decodificador nativo de Wazuh v4.14.6:
+    - SSH ....... srcip, dstuser              (decoder 'sshd')
+    - Windows ... win.system.*, win.eventdata.* (eventchannel JSON)
+    - FIM ....... file, sha256                (decoder syscheck_*)
+    - Vuln ...... vulnerability.cve, .severity, .status, .package.name (json)
+
+  Solo se añadiran decoders aqui si Kriptome integra una fuente syslog cuyo
+  formato NO tenga decoder nativo (p.ej. un UTM/VPN concreto no soportado).
+  En ese caso: decodificar -> validar con wazuh-logtest -> versionar aqui.
+  ===========================================================================
+-->

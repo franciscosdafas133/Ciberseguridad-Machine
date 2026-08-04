@@ -1,0 +1,35 @@
+# Expected results — REGLAS_TUNEADAS/test_data/sudo_pam_samples.log
+# Fuente: RESULTADOS_ESPERADOS.docx (no editado; re-expresion estructurada).
+# Estado de validacion: PENDIENTE (sin evidencia de ejecucion guardada).
+fixture: test_data/sudo_pam_samples.log
+wazuh_version: v4.14.6
+validation_status: PENDIENTE
+expectations:
+  - lines: "1"
+    log: "sudo deploy : ... USER=root ... COMMAND=/usr/bin/systemctl restart nginx"
+    expected_native_rule: '5402 level 3 "Successful sudo to ROOT"'
+    expected_routing: CONTEXT
+    note: "deploy legitimo; no genera correo. Ruta CONTEXT, la evalua la App"
+  - lines: "2"
+    log: "sudo intruso : ... USER=root ... COMMAND=/bin/bash"
+    expected_native_rule: "5402 level 3"
+    expected_routing: CONTEXT
+    note: >-
+      mismo ID de regla que la linea 1; el CONTEXTO (usuario 'intruso' vs
+      'deploy') lo evalua la Kriptome App, no Wazuh -- Wazuh no distingue
+      quien es sospechoso, solo que hubo un sudo exitoso a root
+  - lines: "3"
+    log: "sudo intruso : user NOT in sudoers ; ..."
+    expected_native_rule: '5405 level 5 "Unauthorized user attempted to use sudo"'
+    expected_case_type: null
+    expected_routing: CONTEXT
+    note: >-
+      no existe case_type formal en policies/case_types/*.yaml para uso
+      indebido de sudo (corregido en la pasada de cierre de auditoria
+      teorica -- el nombre "SUDO_DENIED" no correspondia a ninguna policy
+      activa). Rula CONTEXT hasta que se decida si amerita una policy propia
+      o se cubre dentro de otro case_type existente.
+  - lines: "4"
+    log: "sshd pam_unix(sshd:session): session opened for user deploy by (uid=0)"
+    expected_native_rule: '5501 level 3 "PAM: Login session opened"'
+    expected_routing: CONTEXT

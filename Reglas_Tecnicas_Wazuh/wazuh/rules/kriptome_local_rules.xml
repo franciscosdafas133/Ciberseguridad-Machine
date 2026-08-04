@@ -1,0 +1,323 @@
+<!--
+  ===========================================================================
+  Kriptome MiniSOC — Reglas custom TUNEADAS
+  ===========================================================================
+  Version ......: 1.2.1
+                  1.2.1 = decision D-KEV RESUELTA: fuente de verdad KEV =
+                          enriquecimiento en la Kriptome App sobre las
+                          reglas nativas del Vulnerability Detector
+                          (23501/23504/23505/23506), consultando el feed
+                          CISA KEV solo cuando hay vulnerability.cve valido.
+                          100040 queda DESCARTADA para produccion (no solo
+                          experimental), ver
+                          policies/case_types/VULNERABILITY_KEV.yaml y
+                          experimental/100040_cisa_kev.xml.
+                  1.2.0 = alineacion tecnica: vocabulario de estados normalizado,
+                          100040 (CISA KEV) movida a experimental/ (deshabilitada;
+                          decision de arquitectura KEV pendiente en ese momento),
+                          documentada equivalencia same_source_ip/same_srcip. Ver
+                          REPO_ALIGNMENT_REPORT.md y CHANGELOG.md.
+                  1.1.0 = revision de despliegue: snippet ossec.conf con paridad
+                          default v4.14.6, listas CDB en formato estricto,
+                          test_data con margen de frecuencia, runbook completo.
+                  1.0.0 = tuning inicial.
+  Wazuh base ...: v4.14.6  (ruleset oficial de referencia)
+  Deploy .......: /var/ossec/etc/rules/kriptome_local_rules.xml
+                  (cargado via <rule_dir>etc/rules</rule_dir> en ossec.conf)
+  ==
+  PRINCIPIO (doc 01/02): Wazuh detecta ancho, la Kriptome App agrupa en casos
+  y enruta. Aqui NO se resuelve deduplicacion, fingerprint ni routing de
+  correo: eso vive en el motor de casos. Estas reglas solo:
+    (a) rellenan huecos de deteccion reales que el ruleset nativo NO cubre;
+    (b) corrigen las custom rules del 02_Set_Reglas.md que estaban rotas;
+    (c) etiquetan con grupos kriptome_* para que la App enrute de forma
+        deterministica y mantenible (sin depender solo de rule.id + level).
+  ==
+  Convencion de grupos de routing Kriptome (los lee la App):
+    kriptome_context     -> enriquece caso, NO abre caso, 0 IA, 0 correo
+    kriptome_candidate   -> puede abrir caso (pasa dedupe/FP/fingerprint)
+    kriptome_critical    -> abre/actualiza caso, revision humana, IA no descarta
+    kriptome_digest      -> resumen periodico, no tiempo real
+  ==
+  VOCABULARIO DE ESTADOS (normalizado; ver specifications/validation_statuses.md
+  para las definiciones completas). Reemplaza el vocabulario libre anterior
+  (PEND-LOGTEST/PEND-SHADOW/NO VERIFICADO/OPCIONAL):
+    DISEÑADO                 -> especificado, sin verificar contra XML ni Manager
+    VALIDADO-XML             -> comprobado contra el ruleset XML oficial v4.14.6
+    VALIDADO-LOGTEST         -> corrido en wazuh-logtest con evidencia guardada
+    VALIDADO-SHADOW          -> observado en shadow mode con evidencia guardada
+    PENDIENTE                -> requiere una validacion superior no realizada aun
+    EXPERIMENTAL             -> decision de producto sin tomar; no se carga en prod
+  Ninguna regla de este archivo esta marcada VALIDADO-LOGTEST ni
+  VALIDADO-SHADOW porque no existe evidencia de ejecucion guardada en el
+  repo (nunca se ha desplegado en un Manager real). Ver REPO_ALIGNMENT_REPORT.md.
+  ==
+  NOTA same_source_ip vs same_srcip (verificado en src/analysisd/rules.c del
+  tag v4.14.6, lineas 169-170 y 1019-1020): son ALIASES del mismo parametro
+  interno (FIELD_SRCIP) — ambos tags son validos y equivalentes en Wazuh,
+  ninguno es incorrecto. Este archivo usa <same_source_ip/> porque es el tag
+  que usa el ruleset OFICIAL de Wazuh (0 apariciones de <same_srcip/> en
+  ruleset/rules/*.xml del tag v4.14.6) — mantiene consistencia de estilo con
+  el ruleset que este proyecto audita, sin diferencia funcional.
+  ===========================================================================
+-->
+
+<!-- Alinear cadencia con los correlacionadores nativos (MS_FREQ=8, sshd freq=8) -->
+<var name="KR_BF_FREQ">8</var>
+<var name="KR_BF_TIME">240</var>
+
+<group name="kriptome,">
+
+  <!-- =======================================================================
+       100010 — ROLL-UP de brute force SSH   [ESTADO: VALIDADO-XML]
+       ==
+       QUE HACE: NO re-detecta. El ruleset nativo YA detecta brute force SSH:
+           5712  (freq8/tf120) invalid/non-existent user  -> if_matched_sid 5710
+           5763  (freq8/tf120) valid user, "Failed password" via 5760
+           5720  (freq8, SIN timeframe) generico via 5716  [quirk nativo]
+           5719  (freq8/tf120) denied user (DenyUsers)     via 5718
+       Esta regla es un PASS-THROUGH (if_sid) que unifica esas 4 variantes en
+       un unico ID Kriptome estable, con grupo de routing, y habilita 100012.
+       POR QUE: el doc proponia if_matched_sid 5716 con freq 5 -> DUPLICA lo
+       nativo Y ademas 5716 casi nunca es la regla terminal en Linux moderno
+       (gana 5760), asi que contaria de menos. Anclar por if_sid a las reglas
+       de brute force nativas es correcto y sobrevive updates de Wazuh.
+       ======================================================================= -->
+  <rule id="100010" level="10">
+    <if_sid>5712,5719,5720,5763</if_sid>
+    <description>Kriptome: brute force SSH confirmado desde $(srcip)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>authentication_failures,kriptome_correlation,kriptome_candidate,</group>
+  </rule>
+
+  <!-- =======================================================================
+       100011 — Brute force Windows contra UNA cuenta   [ESTADO: VALIDADO-XML; requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
+       ==
+       QUE HACE: rellena un HUECO REAL. El nativo 60204 correlaciona
+       "Multiple Windows Logon Failures" por win.eventdata.ipAddress (misma
+       IP -> password spraying). NO existe regla nativa de "muchos fallos de
+       logon contra la MISMA cuenta" (60203 es fallos de operacion privilegiada
+       por usuario, no de logon). Esto detecta brute force dirigido a una cuenta.
+       FIX vs doc: el doc usaba <same_user/>. En eventchannel de Windows el
+       usuario NO se mapea al campo generico 'user'/'dstuser' (0 usos de
+       <same_user/> en el ruleset nativo de Windows; el nativo usa
+       <same_field>win.eventdata.targetUserName</same_field> -> ver 60203).
+       Con <same_user/> esta regla NO correlacionaria. Corregido a same_field.
+       ======================================================================= -->
+  <rule id="100011" level="10" frequency="$KR_BF_FREQ" timeframe="$KR_BF_TIME">
+    <if_matched_sid>60122</if_matched_sid>
+    <same_field>win.eventdata.targetUserName</same_field>
+    <description>Kriptome: brute force Windows contra la cuenta $(win.eventdata.targetUserName)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>authentication_failures,kriptome_correlation,kriptome_candidate,</group>
+  </rule>
+
+  <!-- =======================================================================
+       100012 — Login SSH EXITOSO tras brute force (misma IP)   [ESTADO: VALIDADO-XML (sintaxis y campos); requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
+       ==
+       QUE HACE: el cambio material critico del doc 02 (Escenario C). Éxito de
+       autenticacion desde una IP que acaba de hacer brute force = posible
+       credencial comprometida.
+       FIX vs doc: el original tenia DOS <if_matched_sid> (5715 y 100010) ->
+       Wazuh solo honra UNO, la regla quedaba mal formada. Forma correcta:
+         if_sid = 5715        (el evento ACTUAL es el login exitoso)
+         if_matched_sid = 100010 (hubo brute force reciente)
+         same_source_ip       (misma IP atacante)
+       ======================================================================= -->
+  <rule id="100012" level="12" timeframe="600">
+    <if_sid>5715</if_sid>
+    <if_matched_sid>100010</if_matched_sid>
+    <same_source_ip/>
+    <description>Kriptome: login SSH EXITOSO tras brute force desde $(srcip) — posible compromiso de credenciales</description>
+    <mitre><id>T1110</id><id>T1078</id></mitre>
+    <group>authentication_success,kriptome_correlation,kriptome_critical,</group>
+  </rule>
+
+  <!-- =======================================================================
+       100013 — Login Windows EXITOSO tras brute force (misma IP)   [ESTADO: VALIDADO-XML (sintaxis y campos); requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
+       ==
+       Equivalente Windows de 100012. No estaba en el doc pero es la misma
+       logica de cambio material y Windows es la mitad del parque PyME.
+       60106 = "Windows Logon Success"; 60204 = brute force por IP.
+
+       LIMITACION DOCUMENTADA (v1.3.0, no se modifica la regla sin
+       probarla antes en un Manager real):
+       100011 correlaciona los fallos contra UNA MISMA CUENTA usando
+       same_field=win.eventdata.targetUserName (linea de arriba en este
+       archivo): esa correlacion SI garantiza "misma cuenta" en sus eventos.
+       100013, en cambio, se apoya en la correlacion NATIVA 60204, que
+       agrupa por same_field=win.eventdata.ipAddress (misma IP), NO por
+       targetUserName. Por lo tanto 100013 NO demuestra por si sola que
+       todos los fallos previos contados por 60204 fueron contra la MISMA
+       cuenta que el login exitoso final: solo demuestra que vinieron de
+       la misma IP.
+       La verificacion de coincidencia de cuenta se realiza en Kriptome App
+       consultando los eventos fallidos relacionados (ver
+       specifications/auth_evidence.schema.json, campo
+       matching_user_verified): el backend futuro debe (1) recuperar los
+       fallos previos desde la misma IP, (2) comparar
+       win.eventdata.targetUserName de cada uno contra el target_user del
+       evento exitoso, (3) contar cuantos fallos coinciden con esa cuenta,
+       (4) fijar matching_user_verified segun el resultado, (5) generar la
+       redaccion correcta en la notificacion (ver policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml
+       seccion auth_evidence_requirements). No se crea una nueva regla XML
+       que correlacione por IP+cuenta a la vez porque eso requeriria
+       probarla contra un Manager real primero (PEND-LOGTEST), y el prompt
+       de esta pasada de alineacion prohibe expresamente inventar reglas
+       sin esa prueba.
+       ======================================================================= -->
+  <rule id="100013" level="12" timeframe="600">
+    <if_sid>60106</if_sid>
+    <if_matched_sid>60204</if_matched_sid>
+    <same_field>win.eventdata.ipAddress</same_field>
+    <description>Kriptome: login Windows EXITOSO tras brute force desde $(win.eventdata.ipAddress) — posible compromiso</description>
+    <mitre><id>T1110</id><id>T1078</id></mitre>
+    <group>authentication_success,kriptome_correlation,kriptome_critical,</group>
+  </rule>
+
+  <!-- =======================================================================
+       100030 — Whitelist FIM GLOBAL por lista CDB   [ESTADO: VALIDADO-XML]
+       (Alcance: activacion opcional por cliente — cada Manager decide si la
+       carga; no es un estado de validacion, es una decision de despliegue.)
+       ==
+       QUE HACE: silencia FIM en paths de PURO ruido UNIVERSAL (ej. heartbeat
+       propio de la infraestructura de Kriptome, presente en TODOS los
+       tenants por igual). FIX vs doc: en vez de hardcodear el path en la
+       regla, usa lista CDB; Ops añade paths a etc/lists/kriptome-fim-whitelist
+       sin tocar XML. Campo 'file' VALIDADO (99901 nativo usa $(file)).
+
+       LIMITACION (match_key exacto): sirve para archivos concretos, NO para
+       directorios/regex. Para ruido a nivel de carpeta usa <ignore
+       type="sregex"> en el agent.conf (ver agent-conf/). NUNCA whitelistear
+       /etc, /bin, System32, drivers, tareas programadas.
+
+       REGLA DE ALCANCE (v1.3.1, Fase 14: separacion global vs tenant-specific):
+       esta lista (etc/lists/kriptome-fim-whitelist) es GLOBAL al Manager y
+       por tanto SOLO puede contener ruido UNIVERSAL APROBADO: rutas que
+       son ruido en CUALQUIER tenant atendido por este Manager (p.ej. el
+       heartbeat propio de la plataforma Kriptome). NUNCA se agrega aqui una
+       excepcion que solo aplique a UN tenant especifico: eso silenciaria
+       FIM tambien para los demas tenants que comparten el mismo Manager
+       (una ruta whitelisteada para el tenant A quedaria invisible tambien
+       para el tenant B, aunque en B esa misma ruta si sea sospechosa).
+
+       Las excepciones TENANT-SPECIFIC deben vivir en una de estas dos capas,
+       nunca en esta lista global:
+         (a) agent.conf del GRUPO del tenant (ver
+             REGLAS_TUNEADAS/agent-conf/CLI-001_agent.conf.example), cuando
+             es una decision de QUE SE RECOLECTA (ignore/directories), o
+         (b) la false-positive policy de la Kriptome App (motor de casos,
+             ver doc 03 politica de FP), cuando es una decision de NEGOCIO
+             sobre ese tenant especifico (p.ej. "este cliente instala este
+             archivo todos los meses, es su proceso legitimo").
+       ======================================================================= -->
+  <rule id="100030" level="0">
+    <if_sid>550,553,554,594,598</if_sid>
+    <list field="file" lookup="match_key">etc/lists/kriptome-fim-whitelist</list>
+    <description>Kriptome: FIM en path whitelisted GLOBALMENTE ($(file)) — silenciado para todos los tenants de este Manager</description>
+    <group>syscheck,kriptome_silenced,</group>
+  </rule>
+
+  <!-- =======================================================================
+       100040 — CVE bajo explotacion activa (CISA KEV)   [ESTADO: DESCARTADA-PARA-PRODUCCION]
+       ==
+       MOVIDA a experimental/100040_cisa_kev.xml — NO se carga en produccion,
+       y NO se activara (decision D-KEV RESUELTA en v1.2.1). La fuente de
+       verdad KEV es el enriquecimiento en la Kriptome App sobre las reglas
+       NATIVAS 23501/23504/23505/23506, consultando el feed CISA KEV real
+       solo cuando hay vulnerability.cve valido — ver
+       policies/case_types/VULNERABILITY_KEV.yaml para el flujo completo y
+       specifications/enrichment_result.schema.json ($defs.kev_result) para
+       el contrato de datos. Este archivo se conserva solo como referencia
+       historica de la correccion XML (campo vulnerability.cve vs el
+       cisa_kev inexistente del set original), no como pieza pendiente de
+       activar. Ver experimental/100040_cisa_kev.xml para el detalle completo.
+       ======================================================================= -->
+
+  <!-- =======================================================================
+       AISLAMIENTO MULTI-TENANT EN CORRELACIONES  [ESTADO: PENDIENTE]
+       (v1.3.1 Theory Closure, Fase 5: reescrito. La version anterior de
+       este comentario afirmaba de forma imprecisa que "Wazuh correlaciona
+       por IP a nivel de TODO el Manager" para todas las reglas. Eso NO es
+       correcto en general: hay que distinguir el comportamiento por
+       defecto de <frequency>/<timeframe> de la opcion explicita
+       <global_frequency>.)
+       ==
+       COMPORTAMIENTO REAL DE frequency/timeframe (verificado contra
+       src/analysisd/rules.c del tag v4.14.6, ver
+       REGLAS_TUNEADAS/PROCEDENCIA_WAZUH.docx para el metodo de verificacion):
+       por DEFECTO, <frequency>/<timeframe> sin <global_frequency> cuenta
+       eventos del MISMO agente que origino el primer evento de la
+       secuencia, NO agrega automaticamente eventos de agentes distintos.
+       La opcion <global_frequency> es la que EXPANDE el conteo a TODOS los
+       agentes del Manager, y ninguna de las reglas 100010-100013 de este
+       archivo la declara.
+
+       ENTONCES, EL RIESGO REAL NO ES "todo el Manager se mezcla siempre".
+       Es mas especifico:
+         (a) Dos AGENTES NORMALES (uno por tenant, cada uno con su propio
+             agent.id) NO deben asumirse mezclados automaticamente: el
+             conteo de frequency/timeframe de estas reglas ya esta acotado
+             por agente en el caso comun, porque ninguna usa
+             global_frequency.
+         (b) El riesgo real vive en FUENTES COMPARTIDAS: syslog
+             centralizado sin agente propio, integraciones agentless,
+             colectores por sede que reenvian eventos de multiples
+             sistemas bajo un unico agent.id, o eventos emitidos por el
+             propio Manager (no por un agente de tenant); en esos casos
+             SI puede haber conteo compartido entre lo que en la capa de
+             negocio son tenants distintos, porque desde la perspectiva de
+             Wazuh es el MISMO agent.id.
+         (c) La atribucion final del CASO nunca se mezcla en ningun
+             escenario, porque eso se re-resuelve en el Tenant Resolver por
+             tenant_id real al construir el caso (ver
+             specifications/tenant_resolution.md): el riesgo, cuando
+             existe, es solo en el CONTEO/DISPARO de la correlacion de
+             Wazuh, nunca en a que tenant se atribuye el caso resultante.
+
+       PRUEBA OBLIGATORIA PARA FUENTES COMPARTIDAS: antes de dar por buena
+       la separacion de un colector por sede o cualquier fuente agentless
+       compartida entre tenants, se debe verificar con datos reales (ver
+       docs/testing/MASTER_TEST_PLAN.md, prueba de fuente compartida) que
+       los eventos de dos tenants que pasan por esa fuente NO disparan una
+       correlacion combinada. Si el colector asigna un agent.id distinto
+       por tenant (recomendado, ver docs/runbooks/TENANT_ISOLATION_RUNBOOK.md),
+       el riesgo desaparece por diseno sin tocar reglas.
+
+       MITIGACION (si la prueba anterior detecta mezcla real en una fuente
+       compartida): añadir a las custom rules afectadas
+           <same_field>agent.labels.client_code</same_field>
+       (NUNCA agent.labels.client_id, ese nombre de campo fue retirado en
+       la migracion de identificadores de tenant, ver
+       specifications/tenant_identifier_migration.md) para exigir mismo
+       client_code ademas de misma IP/cuenta. Esta mitigacion NO se aplica
+       preventivamente: requiere primero ejecutar wazuh-logtest contra un
+       Manager real confirmando que agent.labels.client_code es accesible
+       en tiempo de evaluacion de regla en la version desplegada (ver
+       docs/runbooks/WAZUH_DEPLOYMENT_RUNBOOK.md). No se edita esta regla
+       XML productiva agregando same_field nuevos sin esa prueba previa.
+       Ejemplo de la forma que tomaria la mitigacion (NO activo, solo
+       referencia):
+
+       <rule id="100011" level="10" frequency="$KR_BF_FREQ" timeframe="$KR_BF_TIME">
+         <if_matched_sid>60122</if_matched_sid>
+         <same_field>win.eventdata.targetUserName</same_field>
+         <same_field>agent.labels.client_code</same_field>   ~ ESTADO: PENDIENTE, requiere wazuh-logtest previo ~
+         ...
+       </rule>
+       ======================================================================= -->
+
+</group>
+
+<!--
+  ===========================================================================
+  ELIMINADAS respecto a 02_Set_Reglas.md (justificacion en EXPLICACION_DEL_TUNING.docx §11):
+   - 100020 (bajar sudo OK 5402 a nivel 2): INNECESARIA y contraria al
+     principio "no silenciar en Wazuh". 5402 ya es level 3 y la App lo trata
+     como CONTEXT. Silenciarlo en Wazuh rompe correlacion de escalada de
+     privilegios. Se enruta en la App, no aqui.
+   - 100200 / 87104 "malware por hash": DUPLICA nativas. Usa 99901 (FIM hash
+     malicioso, level 14) + 87105 (VirusTotal, level 12) + listas CDB nativas
+     en etc/lists/malicious-ioc/. 87104 ademas es un resultado LIMPIO, no malware.
+  ===========================================================================
+-->

@@ -1,0 +1,62 @@
+<!--
+  ===========================================================================
+  DESCARTADA PARA PRODUCCION — Regla 100040: CVE en explotacion activa (KEV)
+  ===========================================================================
+  ESTADO: DESCARTADA-PARA-PRODUCCION — NO cargada, y no se activara.
+
+  ACTUALIZACION 2026-07-22 (decision D-KEV RESUELTA): la fuente de verdad
+  para CISA KEV es el ENRIQUECIMIENTO EN LA KRIPTOME APP sobre las reglas
+  NATIVAS del Vulnerability Detector (23501/23504/23505/23506), consultando
+  el feed CISA KEV UNICAMENTE cuando Wazuh ya entrego un vulnerability.cve
+  valido. Ver policies/case_types/VULNERABILITY_KEV.yaml para el flujo
+  completo y specifications/enrichment_result.schema.json ($defs.kev_result)
+  para el contrato de datos exacto (verificado contra el feed real de CISA:
+  cveID, vendorProject, product, vulnerabilityName, dateAdded, dueDate,
+  requiredAction, knownRansomwareCampaignUse, cwes, notes).
+
+  Esta regla YA NO se activara: su funcion la cubre el enriquecimiento de
+  la App, no una segunda regla de Wazuh. Se conserva este archivo solo
+  como REFERENCIA HISTORICA de la correccion tecnica que se aplico (ver
+  parrafo "VALIDACION TECNICA XML" mas abajo) — no como candidata pendiente
+  de activacion. Si en el futuro se reconsiderara esta decision, se haria
+  como un cambio de arquitectura nuevo, no como "completar un pendiente".
+
+  ==== Contenido historico (razonamiento previo a la decision, conservado
+  para trazabilidad) ====
+
+  Este archivo NO esta referenciado por ningun <rule_dir> del snippet de
+  despliegue (ver wazuh/config/ossec.conf.ruleset.snippet.xml).
+
+  POR QUE SE HABIA MARCADO EXPERIMENTAL (no un bug, una decision de
+  producto que en ese momento no se habia tomado):
+  El principio de arquitectura del proyecto (doc 01 §2, "arquitectura #8") es
+  que el enriquecimiento CISA KEV ocurre EN LA KRIPTOME APP, despues de
+  indexar, no como una segunda regla de Wazuh. Activar esta regla EN
+  PARALELO a ese enriquecimiento arriesgaba abrir DOS casos por el mismo
+  evento. Eso viola el principio "1 alerta != 2 casos" (doc 03). Esta
+  tension queda resuelta ahora a favor de la App (ver arriba).
+
+  VALIDACION TECNICA XML (sigue siendo cierta, independiente de la decision
+  de producto): la version corregida de la regla es sintacticamente
+  correcta y usa un campo real (`vulnerability.cve`, usado tambien por la
+  regla nativa 23501) en vez del campo `cisa_kev` original que NO existe en
+  tiempo de evaluacion de regla. Ver comentario historico completo en
+  wazuh/rules/kriptome_local_rules.xml (seccion "ELIMINADAS Y MOVIDAS").
+  Estado de esta verificacion puntual: VALIDADO-XML.
+
+  DEPENDENCIA HISTORICA: esta regla necesitaba la lista CDB
+  etc/lists/kriptome-cisa-kev, entregada en este repo como FIXTURE DE
+  PRUEBA con 3 CVE-IDs fijos (ver lists/kriptome-cisa-kev.FIXTURE.md) — NO
+  el feed real. Con la decision D-KEV resuelta, esta dependencia ya no
+  aplica: el enriquecimiento real consulta el feed CISA KEV desde la App,
+  no una lista CDB del Manager.
+  ===========================================================================
+-->
+
+<rule id="100040" level="13">
+  <if_sid>23504,23505,23506</if_sid>
+  <list field="vulnerability.cve" lookup="match_key">etc/lists/kriptome-cisa-kev</list>
+  <description>Kriptome: CVE bajo explotacion activa (CISA KEV): $(vulnerability.cve) en $(vulnerability.package.name)</description>
+  <mitre><id>T1190</id></mitre>
+  <group>vulnerability-detector,kriptome_correlation,kriptome_critical,kriptome_experimental,kriptome_descartada,</group>
+</rule>

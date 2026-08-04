@@ -1,0 +1,12 @@
+Jul  6 15:23:11 linux01 sshd[12345]: Failed password for root from 203.0.113.4 port 51022 ssh2
+Jul  6 15:23:12 linux01 sshd[12346]: Failed password for invalid user admin from 203.0.113.4 port 51023 ssh2
+Jul  6 15:23:13 linux01 sshd[12347]: Failed password for root from 203.0.113.4 port 51024 ssh2
+Jul  6 15:23:14 linux01 sshd[12348]: Failed password for root from 203.0.113.4 port 51025 ssh2
+Jul  6 15:23:15 linux01 sshd[12349]: Failed password for root from 203.0.113.4 port 51026 ssh2
+Jul  6 15:23:16 linux01 sshd[12350]: Failed password for root from 203.0.113.4 port 51027 ssh2
+Jul  6 15:23:17 linux01 sshd[12351]: Failed password for root from 203.0.113.4 port 51028 ssh2
+Jul  6 15:23:18 linux01 sshd[12352]: Failed password for root from 203.0.113.4 port 51029 ssh2
+Jul  6 15:23:19 linux01 sshd[12353]: Failed password for root from 203.0.113.4 port 51030 ssh2
+Jul  6 15:23:20 linux01 sshd[12354]: Failed password for root from 203.0.113.4 port 51031 ssh2
+Jul  6 15:23:21 linux01 sshd[12355]: Failed password for root from 203.0.113.4 port 51032 ssh2
+Jul  6 15:23:40 linux01 sshd[12360]: Accepted password for root from 203.0.113.4 port 51040 ssh2

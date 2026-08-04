@@ -1,0 +1,18 @@
+case_type,rule_id,rule_role,wazuh_family,rule_validation_status,fingerprint_fields,wazuh_route,client_priority_level,human_review_required,policy_validation_status,policy_file
+AGENT_HEALTH,503,closes,Salud sensor,VALIDADO-XML,tenant_id+asset_id+case_type,CANDIDATE,atencion,False,DISEÑADO,policies/case_types/AGENT_HEALTH.yaml
+AGENT_HEALTH,504,detects,Salud sensor,VALIDADO-XML,tenant_id+asset_id+case_type,CANDIDATE,atencion,False,DISEÑADO,policies/case_types/AGENT_HEALTH.yaml
+AGENT_HEALTH,505,detects,Salud sensor,VALIDADO-XML,tenant_id+asset_id+case_type,CANDIDATE,atencion,False,DISEÑADO,policies/case_types/AGENT_HEALTH.yaml
+AGENT_HEALTH,506,detects,Salud sensor,VALIDADO-XML,tenant_id+asset_id+case_type,CANDIDATE,atencion,False,DISEÑADO,policies/case_types/AGENT_HEALTH.yaml
+AUTH_BRUTEFORCE_SUCCESS,100012,detects,SSH,VALIDADO-XML,tenant_id+asset_id+case_type+source_ip+target_user,CRITICAL,critico,True,DISEÑADO,policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml
+AUTH_BRUTEFORCE_SUCCESS,100013,detects,Windows auth,VALIDADO-XML,tenant_id+asset_id+case_type+source_ip+target_user,CRITICAL,critico,True,DISEÑADO,policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml
+FIM_CRITICAL_PATH,100030,suppresses,FIM,VALIDADO-XML,tenant_id+asset_id+case_type+file_path,,,False,DISEÑADO,policies/case_types/FIM_CRITICAL_PATH.yaml
+FIM_CRITICAL_PATH,550,detects,FIM,VALIDADO-DOCUMENTALMENTE,tenant_id+asset_id+case_type+file_path,CANDIDATE,urgente,False,DISEÑADO,policies/case_types/FIM_CRITICAL_PATH.yaml
+FIM_CRITICAL_PATH,553,detects,FIM,VALIDADO-DOCUMENTALMENTE,tenant_id+asset_id+case_type+file_path,CANDIDATE,urgente,False,DISEÑADO,policies/case_types/FIM_CRITICAL_PATH.yaml
+FIM_CRITICAL_PATH,554,detects,FIM,VALIDADO-DOCUMENTALMENTE,tenant_id+asset_id+case_type+file_path,CANDIDATE,urgente,False,DISEÑADO,policies/case_types/FIM_CRITICAL_PATH.yaml
+MALWARE_CONFIRMED,87105,detects,AV/EDR,VALIDADO-DOCUMENTALMENTE,tenant_id+asset_id+case_type+file_hash,CRITICAL,critico,True,DISEÑADO,policies/case_types/MALWARE_CONFIRMED.yaml
+MALWARE_CONFIRMED,99901,detects,FIM,VALIDADO-DOCUMENTALMENTE,tenant_id+asset_id+case_type+file_hash,CRITICAL,critico,True,DISEÑADO,policies/case_types/MALWARE_CONFIRMED.yaml
+VULNERABILITY,100040,deprecated,Vuln,VALIDADO-XML,tenant_id+asset_id+case_type+cve,,,True,DISEÑADO,policies/case_types/VULNERABILITY.yaml
+VULNERABILITY,23501,detects,Vuln,VALIDADO-XML,tenant_id+asset_id+case_type+cve,CANDIDATE,atencion,True,DISEÑADO,policies/case_types/VULNERABILITY.yaml
+VULNERABILITY,23504,detects,Vuln,VALIDADO-XML,tenant_id+asset_id+case_type+cve,CANDIDATE,atencion,True,DISEÑADO,policies/case_types/VULNERABILITY.yaml
+VULNERABILITY,23505,detects,Vuln,VALIDADO-XML,tenant_id+asset_id+case_type+cve,CANDIDATE,atencion,True,DISEÑADO,policies/case_types/VULNERABILITY.yaml
+VULNERABILITY,23506,detects,Vuln,VALIDADO-XML,tenant_id+asset_id+case_type+cve,CANDIDATE,atencion,True,DISEÑADO,policies/case_types/VULNERABILITY.yaml
